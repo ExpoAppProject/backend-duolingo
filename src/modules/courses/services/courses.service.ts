@@ -6,7 +6,14 @@ export class CoursesService {
   constructor(private prisma: PrismaService) {}
 
   async findAll() {
-    return this.prisma.course.findMany({ select: { id: true, title: true, description: true } });
+    try {
+      return await this.prisma.course.findMany({ select: { id: true, title: true, description: true } });
+    } catch (error) {
+      // temporary debug log
+      // eslint-disable-next-line no-console
+      console.error('courses.findAll error', error);
+      throw error;
+    }
   }
 
   async startCourse(userId: string, courseId: string) {

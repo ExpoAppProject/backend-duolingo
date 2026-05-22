@@ -29,3 +29,10 @@ prisma/*.db-journal
 
 # Docker
 .docker/
+
+# Test artifacts
+api_test_out.json
+seed_out.json
+register.json
+response*.json
+*.local.json
