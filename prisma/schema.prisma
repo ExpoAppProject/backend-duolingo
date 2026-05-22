@@ -25,6 +25,9 @@ model User {
   lastStudyDate DateTime?
   role          Role           @default(USER)
   refreshTokens RefreshToken[]
+  courseProgresses CourseProgress[]
+  lessonProgresses LessonProgress[]
+  userTracks UserTrack[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 }
@@ -40,4 +43,92 @@ model RefreshToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+model Course {
+  id        String    @id @default(uuid())
+  title     String
+  description String?
+  tracks    Track[]
+  createdAt DateTime  @default(now())
+  courseProgresses CourseProgress[]
+}
+
+model Track {
+  id        String   @id @default(uuid())
+  courseId  String
+  title     String
+  modules   Module[]
+  createdAt DateTime @default(now())
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  userTracks UserTrack[]
+  @@index([courseId])
+}
+
+model Module {
+  id       String   @id @default(uuid())
+  trackId  String
+  title    String
+  order    Int      @default(0)
+  lessons  Lesson[]
+
+  track Track @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  @@index([trackId])
+}
+
+model Lesson {
+  id       String   @id @default(uuid())
+  moduleId String
+  title    String
+  content  String?
+  order    Int      @default(0)
+
+  module Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  lessonProgresses LessonProgress[]
+  @@index([moduleId])
+}
+
+model CourseProgress {
+  id            String   @id @default(uuid())
+  userId        String
+  courseId      String
+  startedAt     DateTime @default(now())
+  currentTrackId String?
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+  @@index([userId])
+  @@index([courseId])
+}
+
+model LessonProgress {
+  id         String   @id @default(uuid())
+  userId     String
+  lessonId   String
+  completed  Boolean  @default(false)
+  completedAt DateTime?
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lessonId])
+  @@index([userId])
+  @@index([lessonId])
+}
+
+model UserTrack {
+  id       String   @id @default(uuid())
+  userId   String
+  trackId  String
+  releasedAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  track Track @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, trackId])
+  @@index([userId])
+  @@index([trackId])
 }
