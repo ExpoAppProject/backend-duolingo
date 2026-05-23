@@ -7,12 +7,7 @@ import { UsersRepository } from '../repositories/users.repository';
 export class UsersService {
   constructor(private readonly usersRepository: UsersRepository) {}
 
-  async createUser(data: {
-    name: string;
-    email: string;
-    password: string;
-    role: Role;
-  }) {
+  async createUser(data: { name: string; email: string; password: string; role: Role }) {
     return this.usersRepository.create(data);
   }
 
@@ -35,6 +30,7 @@ export class UsersService {
   toPublic(user: User) {
     // Remove sensitive fields from API responses.
     const { password, ...rest } = user;
+    void password;
     return rest;
   }
 }
