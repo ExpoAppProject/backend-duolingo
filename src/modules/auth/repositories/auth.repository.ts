@@ -5,11 +5,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 export class AuthRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  async createRefreshToken(data: {
-    userId: string;
-    tokenHash: string;
-    expiresAt: Date;
-  }) {
+  async createRefreshToken(data: { userId: string; tokenHash: string; expiresAt: Date }) {
     return this.prisma.refreshToken.create({ data });
   }
 

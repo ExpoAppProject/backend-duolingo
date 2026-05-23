@@ -1,8 +1,4 @@
-import {
-  ConflictException,
-  Injectable,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
@@ -108,11 +104,8 @@ export class AuthService {
   }
 
   private async storeRefreshToken(userId: string, refreshToken: string) {
-    const refreshExpiresIn =
-      this.config.get<string>('JWT_REFRESH_EXPIRES_IN') ?? '7d';
-    const expiresAt = new Date(
-      Date.now() + durationToMs(refreshExpiresIn, DEFAULT_REFRESH_MS),
-    );
+    const refreshExpiresIn = this.config.get<string>('JWT_REFRESH_EXPIRES_IN') ?? '7d';
+    const expiresAt = new Date(Date.now() + durationToMs(refreshExpiresIn, DEFAULT_REFRESH_MS));
     const tokenHash = await bcrypt.hash(refreshToken, 12);
 
     await this.authRepository.revokeUserTokens(userId);
