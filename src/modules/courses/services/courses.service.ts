@@ -1,60 +1,59 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
-import { PrismaService } from '../../../prisma/prisma.service';
+import { BadRequestException, Injectable } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { CoursesRepository } from '../repositories/courses.repository';
+import { LESSON_COMPLETED_EVENT, LessonCompletedEvent } from '../events/lesson-completed.event';
+import type { TrackLessonDto, TrackModuleDto } from '../dto/get-track-for-user-response.dto';
 
 @Injectable()
 export class CoursesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private readonly coursesRepository: CoursesRepository,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
   async findAll() {
-    return this.prisma.course.findMany({ select: { id: true, title: true, description: true } });
+    return this.coursesRepository.findAllCourses();
   }
 
   async startCourse(userId: string, courseId: string) {
-    const course = await this.prisma.course.findUnique({ where: { id: courseId } });
+    const course = await this.coursesRepository.findCourseById(courseId);
     if (!course) throw new BadRequestException('Course not found');
 
-    const existing = await this.prisma.courseProgress.findUnique({ where: { userId_courseId: { userId, courseId } } }).catch(() => null);
+    const existing = await this.coursesRepository.findCourseProgress(userId, courseId);
     if (existing) return existing;
 
-    const firstTrack = await this.prisma.track.findFirst({ where: { courseId }, orderBy: { createdAt: 'asc' } });
+    const firstTrack = await this.coursesRepository.findFirstTrackForCourse(courseId);
 
-    const progress = await this.prisma.courseProgress.create({
-      data: {
-        userId,
-        courseId,
-        currentTrackId: firstTrack ? firstTrack.id : null,
-      },
+    const progress = await this.coursesRepository.createCourseProgress({
+      userId,
+      courseId,
+      currentTrackId: firstTrack ? firstTrack.id : null,
     });
 
     if (firstTrack) {
-      await this.prisma.userTrack.createMany({ data: [{ userId, trackId: firstTrack.id }], skipDuplicates: true });
+      await this.coursesRepository.ensureUserTrackReleased(userId, firstTrack.id);
     }
 
     return progress;
   }
 
   async getTrackForUser(userId: string, courseId: string, trackId: string) {
-    const track = await this.prisma.track.findFirst({ where: { id: trackId, courseId } });
+    const track = await this.coursesRepository.findTrackInCourse(courseId, trackId);
     if (!track) throw new BadRequestException('Track not found');
 
-    const modules = await this.prisma.module.findMany({
-      where: { trackId: track.id },
-      orderBy: { order: 'asc' },
-      include: { lessons: { orderBy: { order: 'asc' } } },
-    });
+    const modules = await this.coursesRepository.findModulesWithLessonsByTrack(track.id);
 
     // fetch user's lesson progress for lessons in this track
     const lessonIds = modules.flatMap((m) => m.lessons.map((l) => l.id));
-    const progresses = await this.prisma.lessonProgress.findMany({ where: { userId, lessonId: { in: lessonIds } } });
+    const progresses = lessonIds.length
+      ? await this.coursesRepository.findLessonProgressesForLessons(userId, lessonIds)
+      : [];
     const completedSet = new Set(progresses.filter((p) => p.completed).map((p) => p.lessonId));
 
-    // Flatten lessons to determine sequential locking
-    const flatLessons = modules.flatMap((m) => m.lessons.map((l) => ({ ...l, moduleId: m.id })) );
-
-    const resultModules = [] as any[];
+    const resultModules: TrackModuleDto[] = [];
     let previousCompleted = true; // allow first lesson
     for (const mod of modules) {
-      const modLessons = mod.lessons.map((lesson) => {
+      const modLessons: TrackLessonDto[] = mod.lessons.map((lesson) => {
         const completed = completedSet.has(lesson.id);
         const locked = !previousCompleted;
         if (!completed) previousCompleted = false;
@@ -79,44 +78,56 @@ export class CoursesService {
   }
 
   async completeLesson(userId: string, lessonId: string) {
-    const lesson = await this.prisma.lesson.findUnique({ where: { id: lessonId }, include: { module: true } });
+    const lesson = await this.coursesRepository.findLessonWithModule(lessonId);
     if (!lesson) throw new BadRequestException('Lesson not found');
 
     // find previous lesson in module by order
-    const prev = await this.prisma.lesson.findFirst({
-      where: { moduleId: lesson.moduleId, order: { lt: lesson.order } },
-      orderBy: { order: 'desc' },
-    });
+    const prev = await this.coursesRepository.findPreviousLessonInModule(
+      lesson.moduleId,
+      lesson.order,
+    );
 
     if (prev) {
-      const prevProgress = await this.prisma.lessonProgress.findUnique({ where: { userId_lessonId: { userId, lessonId: prev.id } } }).catch(() => null);
-      if (!prevProgress || !prevProgress.completed) throw new BadRequestException('Previous lesson not completed');
+      const prevProgress = await this.coursesRepository
+        .findLessonProgressesForLessons(userId, [prev.id])
+        .then((rows) => rows[0] ?? null);
+      if (!prevProgress || !prevProgress.completed)
+        throw new BadRequestException('Previous lesson not completed');
     }
 
-    await this.prisma.lessonProgress.upsert({
-      where: { userId_lessonId: { userId, lessonId } },
-      update: { completed: true, completedAt: new Date() },
-      create: { userId, lessonId, completed: true, completedAt: new Date() },
+    const completedAt = new Date();
+    await this.coursesRepository.upsertLessonProgressCompleted({
+      userId,
+      lessonId,
+      completedAt,
     });
 
+    const event: LessonCompletedEvent = { userId, lessonId, completedAt };
+    this.eventEmitter.emit(LESSON_COMPLETED_EVENT, event);
+
     // if this was last lesson of track, release next track
-    const module = await this.prisma.module.findUnique({ where: { id: lesson.moduleId }, include: { track: true } });
+    const module = await this.coursesRepository.findModuleWithTrack(lesson.moduleId);
     if (!module) throw new BadRequestException('Module not found');
-    const lessonsInModule = await this.prisma.lesson.findMany({ where: { moduleId: module.id }, orderBy: { order: 'asc' } });
+    const lessonsInModule = await this.coursesRepository.findLessonsInModule(module.id);
     const isLastInModule = lessonsInModule[lessonsInModule.length - 1].id === lesson.id;
 
     if (isLastInModule) {
       // check if this is the last lesson in the whole track
-      const modules = await this.prisma.module.findMany({ where: { trackId: module.trackId }, orderBy: { order: 'asc' }, include: { lessons: { orderBy: { order: 'asc' } } } });
+      const modules = await this.coursesRepository.findModulesWithLessonsInTrack(module.trackId);
       const lastModule = modules[modules.length - 1];
       const lastLesson = lastModule.lessons[lastModule.lessons.length - 1];
       if (lastLesson.id === lesson.id) {
         // release next track (by createdAt)
-        const nextTrack = await this.prisma.track.findFirst({ where: { courseId: module.track.courseId, createdAt: { gt: module.track.createdAt } }, orderBy: { createdAt: 'asc' } });
+        const nextTrack = await this.coursesRepository.findNextTrackInCourse(
+          module.track.courseId,
+          module.track.createdAt,
+        );
         if (nextTrack) {
-          await this.prisma.userTrack.createMany({ data: [{ userId, trackId: nextTrack.id }], skipDuplicates: true });
+          await this.coursesRepository.ensureUserTrackReleased(userId, nextTrack.id);
           // also update course progress currentTrackId if present
-          await this.prisma.courseProgress.updateMany({ where: { userId, courseId: nextTrack.courseId }, data: { currentTrackId: nextTrack.id } }).catch(() => null);
+          await this.coursesRepository
+            .updateCourseProgressCurrentTrack(userId, nextTrack.courseId, nextTrack.id)
+            .catch(() => null);
         }
       }
     }

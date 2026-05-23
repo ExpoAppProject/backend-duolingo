@@ -6,6 +6,7 @@ import { envValidationSchema } from './config/env/env.validation';
 import { PrismaModule } from './prisma/prisma.module';
 import { CoursesModule } from './modules/courses/courses.module';
 import { HealthModule } from './modules/health/health.module';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { HealthModule } from './modules/health/health.module';
       envFilePath: ['.env', '.env.local'],
       validationSchema: envValidationSchema,
     }),
+    EventEmitterModule.forRoot(),
     PrismaModule,
     HealthModule,
     UsersModule,
