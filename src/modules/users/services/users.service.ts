@@ -33,4 +33,22 @@ export class UsersService {
     void password;
     return rest;
   }
+
+  getXP(user: User) {
+    const totalXP = user.xp;
+    return {
+      totalXP,
+      level: Math.floor(totalXP / 100) + 1,
+      xpToNextLevel: 100 - (totalXP % 100),
+      xpInCurrentLevel: totalXP % 100,
+    };
+  }
+
+  getStreak(user: User) {
+    return {
+      currentStreak: user.streak,
+      longestStreak: user.streak,
+      lastActiveDate: user.lastStudyDate?.toISOString().slice(0, 10) ?? '',
+    };
+  }
 }

@@ -59,7 +59,9 @@ Concluido no backend:
 - Guards JWT e strategies.
 - Endpoint de usuario autenticado.
 - Modelo de cursos, tracks, modulos, licoes e progresso.
-- Endpoints para listar cursos, iniciar curso, buscar trilha e concluir licao.
+- Endpoints para listar cursos, detalhar curso, iniciar curso, buscar trilha, buscar licao, concluir licao e consultar progresso.
+- Modelo de exercicios de multipla escolha persistido no banco.
+- Endpoints de gamificacao para XP e streak.
 - Evento interno de licao concluida.
 - Interceptor de resposta.
 - Filtro global de erros HTTP.
@@ -68,11 +70,10 @@ Concluido no backend:
 
 Pendente:
 
-- Alinhar todos os contratos com o ExpoFront.
-- Expor endpoints dedicados de XP, nivel, streak e progresso.
-- Conectar app mobile aos endpoints reais.
 - Validar fluxo end-to-end.
 - Adicionar suite de testes.
+- Evoluir refresh token automatico no app.
+- Criar novos tipos de exercicio alem de multipla escolha.
 
 ## Stack
 
@@ -512,6 +513,26 @@ Authorization: Bearer <access_token>
 
 Retorna os dados publicos do usuario autenticado.
 
+### Gamification
+
+#### XP
+
+```http
+GET /api/v1/gamification/xp
+Authorization: Bearer <access_token>
+```
+
+Retorna XP total, nivel atual, XP no nivel atual e quanto falta para o proximo nivel.
+
+#### Streak
+
+```http
+GET /api/v1/gamification/streak
+Authorization: Bearer <access_token>
+```
+
+Retorna streak atual, melhor streak e data da ultima atividade.
+
 ### Courses
 
 #### Listar cursos
@@ -521,6 +542,24 @@ GET /api/v1/courses
 ```
 
 Retorna a lista de cursos disponiveis.
+
+#### Detalhar curso
+
+```http
+GET /api/v1/courses/:id
+Authorization: Bearer <access_token>
+```
+
+Retorna dados do curso, modulos, licoes e estados `isCompleted`/`isUnlocked` no formato consumido pelo app.
+
+#### Progresso do curso
+
+```http
+GET /api/v1/courses/:id/progress
+Authorization: Bearer <access_token>
+```
+
+Retorna licoes concluidas, licao atual, modulo atual, XP conquistado no curso e taxa de acerto.
 
 #### Iniciar curso
 
@@ -540,6 +579,15 @@ Authorization: Bearer <access_token>
 
 Retorna trilha, modulos e licoes com estado de bloqueio/conclusao.
 
+#### Buscar licao
+
+```http
+GET /api/v1/courses/lessons/:id
+Authorization: Bearer <access_token>
+```
+
+Retorna a licao com exercicios de multipla escolha.
+
 #### Concluir licao
 
 ```http
@@ -548,6 +596,7 @@ Authorization: Bearer <access_token>
 ```
 
 Marca licao como concluida e emite evento interno.
+Tambem grava resultado, calcula XP, atualiza usuario e streak e retorna `xpEarned`.
 
 ## Contratos de Resposta
 
@@ -625,14 +674,15 @@ Para Android Emulator, o app pode precisar usar:
 http://10.0.2.2:3000/api/v1
 ```
 
-Contratos que ainda precisam ser alinhados:
+Contratos ja expostos para o mobile:
 
-- formato final de `GET /courses`;
-- endpoint para detalhe de curso por ID, se necessario;
-- formato final de track com modulos e licoes;
-- endpoint para progresso por curso;
-- endpoint para XP, nivel e streak;
-- formato de exercicios reais, caso deixem de ser mockados no mobile.
+- `GET /courses`
+- `GET /courses/:id`
+- `GET /courses/:id/progress`
+- `GET /courses/lessons/:id`
+- `POST /courses/lessons/:id/complete`
+- `GET /gamification/xp`
+- `GET /gamification/streak`
 
 Issues abertas de integracao:
 
@@ -736,4 +786,4 @@ Proximos passos recomendados:
 
 ## Status Final do MVP
 
-O backend entrega a base principal para autenticacao, cursos e progresso. Ele esta pronto para ser integrado ao app mobile, mas ainda precisa alinhar contratos finais de progresso/gamificacao e validar a jornada completa com dados reais.
+O backend entrega a base principal para autenticacao, cursos, licoes, exercicios, progresso e gamificacao. Ele esta integrado ao app mobile em nivel de contrato; a etapa seguinte e validar a jornada completa rodando API, banco e Expo simultaneamente.

@@ -7,12 +7,34 @@ export class CoursesRepository {
 
   findAllCourses() {
     return this.prisma.course.findMany({
-      select: { id: true, title: true, description: true },
+      orderBy: { createdAt: 'asc' },
+      include: {
+        tracks: {
+          include: {
+            modules: {
+              include: { lessons: true },
+            },
+          },
+        },
+      },
     });
   }
 
   findCourseById(courseId: string) {
-    return this.prisma.course.findUnique({ where: { id: courseId } });
+    return this.prisma.course.findUnique({
+      where: { id: courseId },
+      include: {
+        tracks: {
+          orderBy: { createdAt: 'asc' },
+          include: {
+            modules: {
+              orderBy: { order: 'asc' },
+              include: { lessons: { orderBy: { order: 'asc' } } },
+            },
+          },
+        },
+      },
+    });
   }
 
   findCourseProgress(userId: string, courseId: string) {
@@ -54,6 +76,15 @@ export class CoursesRepository {
     });
   }
 
+  findLessonWithExercises(lessonId: string) {
+    return this.prisma.lesson.findUnique({
+      where: { id: lessonId },
+      include: {
+        exercises: { orderBy: { order: 'asc' } },
+      },
+    });
+  }
+
   findLessonProgressesForLessons(userId: string, lessonIds: string[]) {
     return this.prisma.lessonProgress.findMany({
       where: { userId, lessonId: { in: lessonIds } },
@@ -74,15 +105,34 @@ export class CoursesRepository {
     });
   }
 
-  upsertLessonProgressCompleted(data: { userId: string; lessonId: string; completedAt: Date }) {
+  upsertLessonProgressCompleted(data: {
+    userId: string;
+    lessonId: string;
+    completedAt: Date;
+    correctAnswers: number;
+    totalAnswers: number;
+    xpEarned: number;
+    accuracyRate: number;
+  }) {
     return this.prisma.lessonProgress.upsert({
       where: { userId_lessonId: { userId: data.userId, lessonId: data.lessonId } },
-      update: { completed: true, completedAt: data.completedAt },
+      update: {
+        completed: true,
+        completedAt: data.completedAt,
+        correctAnswers: data.correctAnswers,
+        totalAnswers: data.totalAnswers,
+        xpEarned: data.xpEarned,
+        accuracyRate: data.accuracyRate,
+      },
       create: {
         userId: data.userId,
         lessonId: data.lessonId,
         completed: true,
         completedAt: data.completedAt,
+        correctAnswers: data.correctAnswers,
+        totalAnswers: data.totalAnswers,
+        xpEarned: data.xpEarned,
+        accuracyRate: data.accuracyRate,
       },
     });
   }
@@ -120,6 +170,57 @@ export class CoursesRepository {
     return this.prisma.courseProgress.updateMany({
       where: { userId, courseId },
       data: { currentTrackId: trackId },
+    });
+  }
+
+  findCourseProgressSummary(userId: string, courseId: string) {
+    return this.prisma.course.findUnique({
+      where: { id: courseId },
+      include: {
+        tracks: {
+          orderBy: { createdAt: 'asc' },
+          include: {
+            modules: {
+              orderBy: { order: 'asc' },
+              include: {
+                lessons: {
+                  orderBy: { order: 'asc' },
+                  include: {
+                    lessonProgresses: {
+                      where: { userId },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        courseProgresses: {
+          where: { userId },
+        },
+      },
+    });
+  }
+
+  addUserXp(userId: string, amount: number, studiedAt: Date) {
+    return this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.findUniqueOrThrow({ where: { id: userId } });
+      const totalXp = user.xp + amount;
+      const newLevel = Math.floor(totalXp / 100) + 1;
+      const lastStudyDate = user.lastStudyDate;
+      const sameDay =
+        lastStudyDate && lastStudyDate.toISOString().slice(0, 10) === studiedAt.toISOString().slice(0, 10);
+      const streak = sameDay ? user.streak : user.streak + 1;
+
+      return tx.user.update({
+        where: { id: userId },
+        data: {
+          xp: totalXp,
+          level: newLevel,
+          streak,
+          lastStudyDate: studiedAt,
+        },
+      });
     });
   }
 }
