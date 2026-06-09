@@ -24,14 +24,14 @@ services:
     container_name: gamified-mysql
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: root
+      MYSQL_ROOT_PASSWORD: 7RtA7wszfoy1yTmePbETwki2fBwnyL
       MYSQL_DATABASE: gamified_db
     ports:
       - "3307:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -proot"]
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -p7RtA7wszfoy1yTmePbETwki2fBwnyL"]
       interval: 5s
       timeout: 5s
       retries: 20
